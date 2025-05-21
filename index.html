@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>خريطة OpenStreetMap - إحصائيات الزيارة</title>
+
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+          integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+          crossorigin=""/>
+    <!-- Leaflet JavaScript -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+            integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+            crossorigin=""></script>
+    <!-- SheetJS (xlsx) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+    <style>
+        /* ... (نفس الـ CSS الأساسي) ... */
+        html, body { height: 100%; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; background-color: #fff; }
+        #top-toolbar { background-color: #f0f0f0; color: #333; padding: 0 15px; display: flex; align-items: center; justify-content: space-between; height: 40px; box-sizing: border-box; position: fixed; top: 0; left: 0; width: 100%; z-index: 1001; border-bottom: 1px solid #d1d1d1; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+        #top-toolbar .toolbar-section { display: flex; align-items: center; }
+        #top-toolbar button, #top-toolbar .site-name-display, #top-toolbar label, .visit-count-display { /* أضفنا .visit-count-display */
+            background-color: transparent; color: #333; border: 1px solid transparent; padding: 6px 12px; margin-left: 8px; cursor: default; border-radius: 4px; font-size: 14px; transition: background-color 0.2s ease, border-color 0.2s ease; white-space: nowrap;
+        }
+        #top-toolbar button, #top-toolbar .site-name-display.copyable, #top-toolbar label { cursor: pointer; }
+        #top-toolbar button:first-child, #top-toolbar .toolbar-section > *:first-child { margin-left: 0; margin-right: 8px; }
+        #top-toolbar button:hover, #top-toolbar .site-name-display.copyable:hover { background-color: #e0e0e0; border-color: #c0c0c0; }
+        #top-toolbar button:active, #top-toolbar .site-name-display.copyable:active { background-color: #d0d0d0; border-color: #b0b0b0; }
+        #top-toolbar .site-name-display { font-weight: bold; background-color: #e9ecef; border: 1px solid #ced4da; min-width: 100px; text-align: center; overflow: hidden; text-overflow: ellipsis; max-width: 200px; }
+        #top-toolbar .site-name-display.copied { background-color: #d4edda; border-color: #c3e6cb; }
+        .hidden { display: none !important; }
+        #top-toolbar input[type="checkbox"] { margin-left: 5px; vertical-align: middle; }
+        #top-toolbar label { padding-left: 3px; }
+
+        /* تنسيقات جديدة لإحصائيات الزيارة */
+        .visit-count-display {
+            font-weight: bold;
+            padding: 4px 8px; /* حشو أقل قليلاً */
+            border-radius: 4px;
+        }
+        #visited-count {
+            background-color: #28a745; /* أخضر */
+            color: white;
+            margin-left: 15px; /* مسافة من العناصر السابقة */
+        }
+        #unvisited-count {
+            background-color: #dc3545; /* أحمر */
+            color: white;
+        }
+
+
+        #map-container { padding-top: 40px; height: 100%; box-sizing: border-box; }
+        #map { width: 100%; height: 100%; }
+        .custom-attribution { position: fixed; bottom: 2px; right: 5px; padding: 3px 6px; background: rgba(255, 255, 255, 0.8); z-index: 1000; font-size: 11px; border-radius: 3px; box-shadow: 0 0 5px rgba(0,0,0,0.2); }
+        .custom-attribution a { color: #0078A8; text-decoration: none; }
+        .custom-attribution a:hover { text-decoration: underline; }
+    </style>
+</head>
+<body>
+    <div id="top-toolbar">
+        <div class="toolbar-section" id="toolbar-left">
+            <button id="btn-upload-file">تحميل ملف Excel</button>
+            <input type="file" id="excel-file-input" accept=".xlsx, .xls, .csv" style="display: none;">
+            
+            <span id="visited-count" class="visit-count-display hidden">زار: 0</span>
+            <span id="unvisited-count" class="visit-count-display hidden">لم يزر: 0</span>
+        </div>
+
+        <div class="toolbar-section" id="toolbar-center">
+            <span id="selected-site-name" class="site-name-display hidden">اسم الموقع</span>
+            <button id="btn-open-gmaps" class="hidden">فتح في جوجل ماب</button>
+            <div id="marker-visited-toggle-container" class="hidden" style="display: flex; align-items: center; margin-left:8px;">
+                <input type="checkbox" id="toggle-marker-visited">
+                <label for="toggle-marker-visited">تمت زيارته</label>
+            </div>
+        </div>
+
+        <div class="toolbar-section" id="toolbar-right">
+            <button id="btn-export-unvisited">تصدير غير المزارة</button>
+        </div>
+    </div>
+    <div id="map-container"><div id="map"></div></div>
+    <div class="custom-attribution">© <a href="https://www.openstreetmap.org/copyright" target="_blank">OpenStreetMap</a> contributors</div>
+
+    <script>
+        var map = L.map('map', {
+            zoomControl: false,
+            attributionControl: false
+        }).setView([24.4686, 39.6142], 6);
+
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {}).addTo(map);
+
+        let markersLayerGroup = L.layerGroup().addTo(map);
+        let currentSelectedMarker = null;
+
+        const defaultIcon = new L.Icon.Default();
+        const greenIcon = new L.Icon({
+            iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-green.png',
+            shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
+            iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41]
+        });
+
+        const btnUploadFile = document.getElementById('btn-upload-file');
+        const excelFileInput = document.getElementById('excel-file-input');
+        const selectedSiteNameDisplay = document.getElementById('selected-site-name');
+        const btnOpenGmaps = document.getElementById('btn-open-gmaps');
+        const markerVisitedToggleContainer = document.getElementById('marker-visited-toggle-container');
+        const toggleMarkerVisitedCheckbox = document.getElementById('toggle-marker-visited');
+        const btnExportUnvisited = document.getElementById('btn-export-unvisited');
+        
+        // عناصر عرض الإحصائيات
+        const visitedCountDisplay = document.getElementById('visited-count');
+        const unvisitedCountDisplay = document.getElementById('unvisited-count');
+
+
+        btnUploadFile.addEventListener('click', () => excelFileInput.click());
+
+        excelFileInput.addEventListener('change', (event) => {
+            hideSelectedSiteInfo();
+            const file = event.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    try {
+                        const data = new Uint8Array(e.target.result);
+                        const workbook = XLSX.read(data, { type: 'array' });
+                        const firstSheetName = workbook.SheetNames[0];
+                        const worksheet = workbook.Sheets[firstSheetName];
+                        const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+                        processExcelData(jsonData);
+                    } catch (error) { console.error("Excel read error:", error); alert("Error reading Excel file."); }
+                };
+                reader.onerror = function() { console.error("FileReader error."); alert("Error reading file."); };
+                reader.readAsArrayBuffer(file);
+            }
+            excelFileInput.value = '';
+        });
+        
+        function parseGoogleMapsUrl(url) {
+            // ... (نفس دالة parseGoogleMapsUrl)
+             if (!url || typeof url !== 'string') return null;
+            let lat, lng;
+            let match;
+            match = url.match(/@([-+]?\d*\.?\d+),([-+]?\d*\.?\d+)/);
+            if (match && match[1] && match[2]) return { lat: parseFloat(match[1]), lng: parseFloat(match[2]) };
+            match = url.match(/(?:q=loc:|q=|ll=)([-+]?\d*\.?\d+),([-+]?\d*\.?\d+)/);
+            if (match && match[1] && match[2]) return { lat: parseFloat(match[1]), lng: parseFloat(match[2]) };
+            match = url.match(/\/dir\/[^/]*\/([-+]?\d*\.?\d+),([-+]?\d*\.?\d+)/);
+            if (match && match[1] && match[2]) return { lat: parseFloat(match[1]), lng: parseFloat(match[2]) };
+            match = url.match(/!3d([-+]?\d*\.?\d+)!4d([-+]?\d*\.?\d+)/);
+            if (match && match[1] && match[2]) return { lat: parseFloat(match[1]), lng: parseFloat(match[2]) };
+            match = url.match(/query=([-+]?\d*\.?\d+)%2C([-+]?\d*\.?\d+)/);
+            if (match && match[1] && match[2]) return { lat: parseFloat(match[1]), lng: parseFloat(match[2]) };
+            return null;
+        }
+
+        function updateVisitCounts() {
+            let visited = 0;
+            let unvisited = 0;
+            markersLayerGroup.eachLayer(function(marker) {
+                if (marker.isVisited) {
+                    visited++;
+                } else {
+                    unvisited++;
+                }
+            });
+
+            visitedCountDisplay.textContent = `زار: ${visited}`;
+            unvisitedCountDisplay.textContent = `لم يزر: ${unvisited}`;
+
+            if (visited > 0 || unvisited > 0) {
+                visitedCountDisplay.classList.remove('hidden');
+                unvisitedCountDisplay.classList.remove('hidden');
+            } else {
+                visitedCountDisplay.classList.add('hidden');
+                unvisitedCountDisplay.classList.add('hidden');
+            }
+        }
+
+
+        function setMarkerVisitedStatus(marker, isVisited) {
+            if (marker) {
+                marker.isVisited = isVisited;
+                marker.setIcon(isVisited ? greenIcon : defaultIcon);
+                updateVisitCounts(); // تحديث الإحصائيات بعد تغيير حالة علامة
+            }
+        }
+
+        function showSelectedSiteInfo(siteName, gmapsUrl, marker) {
+            // ... (نفس الكود)
+            selectedSiteNameDisplay.textContent = siteName;
+            selectedSiteNameDisplay.title = siteName;
+            selectedSiteNameDisplay.classList.remove('hidden');
+            selectedSiteNameDisplay.classList.add('copyable');
+            btnOpenGmaps.onclick = () => window.open(gmapsUrl, '_blank');
+            btnOpenGmaps.classList.remove('hidden');
+            markerVisitedToggleContainer.classList.remove('hidden');
+            toggleMarkerVisitedCheckbox.checked = marker.isVisited || false;
+        }
+
+        function hideSelectedSiteInfo() {
+            // ... (نفس الكود)
+            selectedSiteNameDisplay.classList.add('hidden');
+            selectedSiteNameDisplay.classList.remove('copyable', 'copied');
+            btnOpenGmaps.classList.add('hidden');
+            markerVisitedToggleContainer.classList.add('hidden');
+            currentSelectedMarker = null;
+        }
+        
+        selectedSiteNameDisplay.addEventListener('click', function() {
+            // ... (نفس كود نسخ النص)
+             if (!this.classList.contains('hidden') && this.textContent) {
+                navigator.clipboard.writeText(this.textContent)
+                    .then(() => {
+                        this.classList.add('copied');
+                        const originalText = this.textContent;
+                        this.textContent = 'تم النسخ!';
+                        setTimeout(() => { this.classList.remove('copied'); this.textContent = originalText; }, 1500);
+                    })
+                    .catch(err => { console.error('Copy failed: ', err); alert('Failed to copy.'); });
+            }
+        });
+
+        toggleMarkerVisitedCheckbox.addEventListener('change', function() {
+            if (currentSelectedMarker) {
+                setMarkerVisitedStatus(currentSelectedMarker, this.checked);
+            }
+        });
+
+        btnExportUnvisited.addEventListener('click', function() {
+            // ... (نفس كود التصدير)
+            const unvisitedSitesData = [];
+            unvisitedSitesData.push(['رابط جوجل ماب', 'اسم الموقع']); 
+
+            markersLayerGroup.eachLayer(function(marker) {
+                if (marker.siteData && !marker.isVisited) {
+                    unvisitedSitesData.push([ marker.siteData.url, marker.siteData.name ]);
+                }
+            });
+
+            if (unvisitedSitesData.length <= 1) { 
+                alert('لا توجد مواقع غير مزورة لتصديرها.');
+                return;
+            }
+            const worksheet = XLSX.utils.aoa_to_sheet(unvisitedSitesData);
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, worksheet, 'المواقع غير المزورة');
+            const today = new Date();
+            const dateString = `${today.getFullYear()}-${(today.getMonth()+1).toString().padStart(2, '0')}-${today.getDate().toString().padStart(2, '0')}`;
+            const fileName = `unvisited_sites_${dateString}.xlsx`;
+            XLSX.writeFile(workbook, fileName);
+        });
+
+
+        map.on('click', () => hideSelectedSiteInfo());
+        
+        function processExcelData(data) {
+            markersLayerGroup.clearLayers();
+            hideSelectedSiteInfo();
+            let newMarkers = [];
+            let processedRows = 0;
+
+            for (let i = 0; i < data.length; i++) {
+                // ... (نفس منطق معالجة كل صف)
+                const row = data[i];
+                if (row && row.length >= 1) {
+                    processedRows++;
+                    const googleMapsUrl = String(row[0]).trim();
+                    const siteName = (row.length >= 2 && row[1]) ? String(row[1]).trim() : `موقع ${i + 1}`; 
+                    if (googleMapsUrl) {
+                        const coords = parseGoogleMapsUrl(googleMapsUrl);
+                        if (coords) {
+                            const marker = L.marker([coords.lat, coords.lng], { icon: defaultIcon });
+                            marker.siteData = { name: siteName, url: googleMapsUrl };
+                            marker.isVisited = false; 
+                            marker.on('click', function(e) {
+                                L.DomEvent.stopPropagation(e);
+                                currentSelectedMarker = this;
+                                showSelectedSiteInfo(this.siteData.name, this.siteData.url, this);
+                            });
+                            markersLayerGroup.addLayer(marker);
+                            newMarkers.push(marker);
+                        } else { console.log(`No coords for: ${siteName}`); }
+                    }
+                }
+            }
+            // ... (نفس كود fitBounds والتنبيهات)
+            if (newMarkers.length > 0) {
+                const group = new L.featureGroup(newMarkers);
+                map.fitBounds(group.getBounds().pad(0.1));
+                console.log(`Added ${newMarkers.length} sites.`);
+            } else if (processedRows > 0) {
+                alert(`Processed ${processedRows} rows, but no valid coordinates found.`);
+            } else {
+                 alert("File seems empty.");
+            }
+
+            updateVisitCounts(); // تحديث الإحصائيات بعد معالجة البيانات
+        }
+    </script>
+</body>
+</html>
