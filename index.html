@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>خريطة OpenStreetMap - إحصائيات الزيارة</title>
-
+    
     <!-- Leaflet CSS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
           integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
@@ -15,76 +15,370 @@
             crossorigin=""></script>
     <!-- SheetJS (xlsx) -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    
+    <!-- Font Awesome for icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 
     <style>
-        /* ... (نفس الـ CSS الأساسي) ... */
-        html, body { height: 100%; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; background-color: #fff; }
-        #top-toolbar { background-color: #f0f0f0; color: #333; padding: 0 15px; display: flex; align-items: center; justify-content: space-between; height: 40px; box-sizing: border-box; position: fixed; top: 0; left: 0; width: 100%; z-index: 1001; border-bottom: 1px solid #d1d1d1; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
-        #top-toolbar .toolbar-section { display: flex; align-items: center; }
-        #top-toolbar button, #top-toolbar .site-name-display, #top-toolbar label, .visit-count-display { /* أضفنا .visit-count-display */
-            background-color: transparent; color: #333; border: 1px solid transparent; padding: 6px 12px; margin-left: 8px; cursor: default; border-radius: 4px; font-size: 14px; transition: background-color 0.2s ease, border-color 0.2s ease; white-space: nowrap;
+        :root {
+            --floating-element-bg: rgba(255, 255, 255, 0.85);
+            --element-shadow: 0 4px 12px rgba(0, 0, 0, 0.1), 0 2px 6px rgba(0, 0, 0, 0.05);
+            --element-radius: 12px;
+            --element-padding: 10px 16px;
+            --element-margin: 15px;
+            --element-border: 1px solid rgba(0, 0, 0, 0.08);
+            
+            /* ألوان الأيقونات */
+            --blue-icon: #4dabf7;
+            --orange-icon: #ffa94d;
+            --green-icon: #69db7c;
+            --red-icon: #ff8787;
+            --purple-icon: #cc5de8;
         }
-        #top-toolbar button, #top-toolbar .site-name-display.copyable, #top-toolbar label { cursor: pointer; }
-        #top-toolbar button:first-child, #top-toolbar .toolbar-section > *:first-child { margin-left: 0; margin-right: 8px; }
-        #top-toolbar button:hover, #top-toolbar .site-name-display.copyable:hover { background-color: #e0e0e0; border-color: #c0c0c0; }
-        #top-toolbar button:active, #top-toolbar .site-name-display.copyable:active { background-color: #d0d0d0; border-color: #b0b0b0; }
-        #top-toolbar .site-name-display { font-weight: bold; background-color: #e9ecef; border: 1px solid #ced4da; min-width: 100px; text-align: center; overflow: hidden; text-overflow: ellipsis; max-width: 200px; }
-        #top-toolbar .site-name-display.copied { background-color: #d4edda; border-color: #c3e6cb; }
-        .hidden { display: none !important; }
-        #top-toolbar input[type="checkbox"] { margin-left: 5px; vertical-align: middle; }
-        #top-toolbar label { padding-left: 3px; }
-
-        /* تنسيقات جديدة لإحصائيات الزيارة */
-        .visit-count-display {
-            font-weight: bold;
-            padding: 4px 8px; /* حشو أقل قليلاً */
-            border-radius: 4px;
+        
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
         }
-        #visited-count {
-            background-color: #28a745; /* أخضر */
+        
+        html, body {
+            height: 100%;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background-color: #f0f2f5;
+            overflow: hidden;
+        }
+        
+        /* عناصر الواجهة العائمة */
+        .floating-element {
+            position: fixed;
+            background: var(--floating-element-bg);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border-radius: var(--element-radius);
+            box-shadow: var(--element-shadow);
+            border: var(--element-border);
+            padding: var(--element-padding);
+            z-index: 1000;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            transition: all 0.3s ease;
+        }
+        
+        /* مجموعة الأزرار العلوية */
+        #top-controls {
+            top: var(--element-margin);
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 8px 16px;
+        }
+        
+        /* عناصر التحكم الجانبية */
+        #left-controls {
+            top: var(--element-margin);
+            left: var(--element-margin);
+            flex-direction: column;
+            align-items: flex-start;
+        }
+        
+        #right-controls {
+            top: var(--element-margin);
+            right: var(--element-margin);
+            flex-direction: column;
+            align-items: flex-start;
+        }
+        
+        #bottom-controls {
+            bottom: var(--element-margin);
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 8px 16px;
+        }
+        
+        /* الأزرار */
+        .floating-button {
+            width: 42px;
+            height: 42px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: white;
+            border: none;
             color: white;
-            margin-left: 15px; /* مسافة من العناصر السابقة */
+            font-size: 18px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            box-shadow: var(--element-shadow);
+            position: relative;
+            overflow: hidden;
         }
-        #unvisited-count {
-            background-color: #dc3545; /* أحمر */
-            color: white;
+        
+        .floating-button::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 0;
         }
-
-
-        #map-container { padding-top: 40px; height: 100%; box-sizing: border-box; }
-        #map { width: 100%; height: 100%; }
-        .custom-attribution { position: fixed; bottom: 2px; right: 5px; padding: 3px 6px; background: rgba(255, 255, 255, 0.8); z-index: 1000; font-size: 11px; border-radius: 3px; box-shadow: 0 0 5px rgba(0,0,0,0.2); }
-        .custom-attribution a { color: #0078A8; text-decoration: none; }
-        .custom-attribution a:hover { text-decoration: underline; }
+        
+        .floating-button i {
+            position: relative;
+            z-index: 1;
+            text-shadow: 0 1px 1px rgba(0, 0, 0, 0.1);
+        }
+        
+        .floating-button:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 6px 14px rgba(0, 0, 0, 0.15);
+        }
+        
+        .floating-button:active {
+            transform: translateY(0);
+        }
+        
+        /* ألوان خاصة لكل أيقونة */
+        #btn-upload-file::before {
+            background: linear-gradient(135deg, var(--blue-icon), #228be6);
+        }
+        
+        #btn-select-area::before {
+            background: linear-gradient(135deg, var(--orange-icon), #ff922b);
+        }
+        
+        #btn-open-gmaps::before {
+            background: linear-gradient(135deg, var(--red-icon), #fa5252);
+        }
+        
+        #btn-export-unvisited::before {
+            background: linear-gradient(135deg, var(--green-icon), #40c057);
+        }
+        
+        /* عناصر المعلومات */
+        .info-element {
+            background: var(--floating-element-bg);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border-radius: var(--element-radius);
+            box-shadow: var(--element-shadow);
+            border: var(--element-border);
+            padding: 10px 16px;
+            z-index: 1000;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            max-width: 300px;
+        }
+        
+        #site-name-display {
+            position: fixed;
+            top: 80px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
+        #site-name-display:hover {
+            background: rgba(255, 255, 255, 0.95);
+        }
+        
+        #site-name-display.copied {
+            background: rgba(212, 237, 218, 0.8);
+            color: #155724;
+        }
+        
+        #visit-controls {
+            position: fixed;
+            top: 120px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 12px;
+        }
+        
+        /* العدادات */
+        .counter-element {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 8px 12px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: 500;
+            box-shadow: var(--element-shadow);
+        }
+        
+        #visited-counter {
+            background: rgba(40, 167, 69, 0.15);
+            color: #155724;
+        }
+        
+        #unvisited-counter {
+            background: rgba(220, 53, 69, 0.15);
+            color: #721c24;
+        }
+        
+        .hidden {
+            display: none !important;
+        }
+        
+        /* Map container */
+        #map-container {
+            height: 100%;
+            width: 100%;
+        }
+        
+        #map {
+            width: 100%;
+            height: 100%;
+        }
+        
+        #map.select-mode {
+            cursor: crosshair !important;
+        }
+        
+        /* Custom attribution */
+        .custom-attribution {
+            position: fixed;
+            bottom: 2px;
+            right: 5px;
+            padding: 3px 6px;
+            background: rgba(255, 255, 255, 0.8);
+            z-index: 1000;
+            font-size: 11px;
+            border-radius: 3px;
+            box-shadow: 0 0 5px rgba(0,0,0,0.2);
+        }
+        
+        .custom-attribution a {
+            color: #0078A8;
+            text-decoration: none;
+        }
+        
+        .custom-attribution a:hover {
+            text-decoration: underline;
+        }
+        
+        /* زر التبديل */
+        .toggle-button {
+            padding: 8px 16px;
+            background: var(--floating-element-bg);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            cursor: pointer;
+            box-shadow: var(--element-shadow);
+            border: var(--element-border);
+        }
+        
+        .toggle-button i {
+            color: var(--purple-icon);
+        }
+        
+        /* عناصر التحكم بالخريطة */
+        .leaflet-control-container {
+            display: none;
+        }
+        
+        #zoom-controls {
+            position: fixed;
+            bottom: 80px;
+            right: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            z-index: 1000;
+        }
+        
+        .zoom-button {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: var(--floating-element-bg);
+            backdrop-filter: blur(10px);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            box-shadow: var(--element-shadow);
+            border: var(--element-border);
+            cursor: pointer;
+        }
+        
+        .zoom-button:hover {
+            background: rgba(255, 255, 255, 0.95);
+        }
     </style>
 </head>
 <body>
-    <div id="top-toolbar">
-        <div class="toolbar-section" id="toolbar-left">
-            <button id="btn-upload-file">تحميل ملف Excel</button>
-            <input type="file" id="excel-file-input" accept=".xlsx, .xls, .csv" style="display: none;">
-            
-            <span id="visited-count" class="visit-count-display hidden">زار: 0</span>
-            <span id="unvisited-count" class="visit-count-display hidden">لم يزر: 0</span>
+    <!-- عناصر التحكم العائمة -->
+    <div id="top-controls" class="floating-element">
+        <button class="floating-button" id="btn-upload-file" title="تحميل ملف Excel">
+            <i class="fas fa-file-import"></i>
+        </button>
+        <input type="file" id="excel-file-input" accept=".xlsx, .xls, .csv" style="display: none;">
+        
+        <button class="floating-button" id="btn-select-area" title="تحديد منطقة">
+            <i class="fas fa-vector-square"></i>
+        </button>
+        
+        <button class="floating-button" id="btn-export-unvisited" title="تصدير غير المزارة">
+            <i class="fas fa-file-export"></i>
+        </button>
+    </div>
+    
+    <div id="left-controls" class="floating-element">
+        <div class="counter-element" id="visited-counter">
+            <i class="fas fa-check-circle" style="color: #40c057;"></i>
+            <span> 0</span>
         </div>
-
-        <div class="toolbar-section" id="toolbar-center">
-            <span id="selected-site-name" class="site-name-display hidden">اسم الموقع</span>
-            <button id="btn-open-gmaps" class="hidden">فتح في جوجل ماب</button>
-            <div id="marker-visited-toggle-container" class="hidden" style="display: flex; align-items: center; margin-left:8px;">
-                <input type="checkbox" id="toggle-marker-visited">
-                <label for="toggle-marker-visited">تمت زيارته</label>
-            </div>
-        </div>
-
-        <div class="toolbar-section" id="toolbar-right">
-            <button id="btn-export-unvisited">تصدير غير المزارة</button>
+        
+        <div class="counter-element" id="unvisited-counter">
+            <i class="fas fa-times-circle" style="color: #ff6b6b;"></i>
+            <span> 0</span>
         </div>
     </div>
-    <div id="map-container"><div id="map"></div></div>
+    
+    <div id="site-name-display" class="info-element hidden">اسم الموقع</div>
+    
+    <div id="visit-controls" class="hidden">
+        <button class="floating-button" id="btn-open-gmaps" title="فتح في جوجل ماب">
+            <i class="fab fa-google"></i>
+        </button>
+        
+        <div class="toggle-button" id="toggle-visited-btn">
+            <i class="fas fa-check-square"></i>
+            <span>تمت الزيارة</span>
+        </div>
+    </div>
+    
+    <div id="zoom-controls">
+        <div class="zoom-button" id="zoom-in">
+            <i class="fas fa-plus"></i>
+        </div>
+        <div class="zoom-button" id="zoom-out">
+            <i class="fas fa-minus"></i>
+        </div>
+    </div>
+    
+    <div id="map-container">
+        <div id="map"></div>
+    </div>
+    
     <div class="custom-attribution">© <a href="https://www.openstreetmap.org/copyright" target="_blank">OpenStreetMap</a> contributors</div>
 
     <script>
+        // --- تهيئة الخريطة ---
         var map = L.map('map', {
             zoomControl: false,
             attributionControl: false
@@ -95,6 +389,7 @@
         let markersLayerGroup = L.layerGroup().addTo(map);
         let currentSelectedMarker = null;
 
+        // --- أيقونات العلامات ---
         const defaultIcon = new L.Icon.Default();
         const greenIcon = new L.Icon({
             iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-green.png',
@@ -102,22 +397,42 @@
             iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41]
         });
 
+        // --- الوصول لعناصر الواجهة ---
         const btnUploadFile = document.getElementById('btn-upload-file');
         const excelFileInput = document.getElementById('excel-file-input');
-        const selectedSiteNameDisplay = document.getElementById('selected-site-name');
+        const siteNameDisplay = document.getElementById('site-name-display');
         const btnOpenGmaps = document.getElementById('btn-open-gmaps');
-        const markerVisitedToggleContainer = document.getElementById('marker-visited-toggle-container');
-        const toggleMarkerVisitedCheckbox = document.getElementById('toggle-marker-visited');
+        const toggleVisitedBtn = document.getElementById('toggle-visited-btn');
         const btnExportUnvisited = document.getElementById('btn-export-unvisited');
+        const visitedCounter = document.getElementById('visited-counter');
+        const unvisitedCounter = document.getElementById('unvisited-counter');
+        const mapElement = document.getElementById('map');
+        const zoomInBtn = document.getElementById('zoom-in');
+        const zoomOutBtn = document.getElementById('zoom-out');
         
-        // عناصر عرض الإحصائيات
-        const visitedCountDisplay = document.getElementById('visited-count');
-        const unvisitedCountDisplay = document.getElementById('unvisited-count');
+        // --- متغيرات ميزة تحديد المنطقة ---
+        const btnSelectArea = document.getElementById('btn-select-area');
+        let isSelectMode = false;
+        let selectionRectangle = null;
+        let startPoint = null;
+        let isDrawing = false; 
 
-
+        // --- ربط الأحداث ---
         btnUploadFile.addEventListener('click', () => excelFileInput.click());
+        excelFileInput.addEventListener('change', handleFileChange);
+        btnSelectArea.addEventListener('click', toggleSelectMode);
+        siteNameDisplay.addEventListener('click', copySiteName);
+        toggleVisitedBtn.addEventListener('click', handleVisitedToggle);
+        btnExportUnvisited.addEventListener('click', exportUnvisitedSites);
+        zoomInBtn.addEventListener('click', () => map.zoomIn());
+        zoomOutBtn.addEventListener('click', () => map.zoomOut());
+        map.on('click', () => hideSelectedSiteInfo());
+        map.on('mousedown', handleMapMouseDown);
+        map.on('mousemove', handleMapMouseMove);
+        map.on('mouseup', handleMapMouseUp);
 
-        excelFileInput.addEventListener('change', (event) => {
+        // --- دوال التطبيق الأساسية ---
+        function handleFileChange(event) {
             hideSelectedSiteInfo();
             const file = event.target.files[0];
             if (file) {
@@ -130,131 +445,19 @@
                         const worksheet = workbook.Sheets[firstSheetName];
                         const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
                         processExcelData(jsonData);
-                    } catch (error) { console.error("Excel read error:", error); alert("Error reading Excel file."); }
+                    } catch (error) { 
+                        console.error("Excel read error:", error); 
+                        showNotification("خطأ في قراءة ملف Excel.", "error");
+                    }
                 };
-                reader.onerror = function() { console.error("FileReader error."); alert("Error reading file."); };
+                reader.onerror = function() { 
+                    console.error("FileReader error.");
+                    showNotification("خطأ في قراءة الملف.", "error");
+                };
                 reader.readAsArrayBuffer(file);
             }
             excelFileInput.value = '';
-        });
-        
-        function parseGoogleMapsUrl(url) {
-            // ... (نفس دالة parseGoogleMapsUrl)
-             if (!url || typeof url !== 'string') return null;
-            let lat, lng;
-            let match;
-            match = url.match(/@([-+]?\d*\.?\d+),([-+]?\d*\.?\d+)/);
-            if (match && match[1] && match[2]) return { lat: parseFloat(match[1]), lng: parseFloat(match[2]) };
-            match = url.match(/(?:q=loc:|q=|ll=)([-+]?\d*\.?\d+),([-+]?\d*\.?\d+)/);
-            if (match && match[1] && match[2]) return { lat: parseFloat(match[1]), lng: parseFloat(match[2]) };
-            match = url.match(/\/dir\/[^/]*\/([-+]?\d*\.?\d+),([-+]?\d*\.?\d+)/);
-            if (match && match[1] && match[2]) return { lat: parseFloat(match[1]), lng: parseFloat(match[2]) };
-            match = url.match(/!3d([-+]?\d*\.?\d+)!4d([-+]?\d*\.?\d+)/);
-            if (match && match[1] && match[2]) return { lat: parseFloat(match[1]), lng: parseFloat(match[2]) };
-            match = url.match(/query=([-+]?\d*\.?\d+)%2C([-+]?\d*\.?\d+)/);
-            if (match && match[1] && match[2]) return { lat: parseFloat(match[1]), lng: parseFloat(match[2]) };
-            return null;
         }
-
-        function updateVisitCounts() {
-            let visited = 0;
-            let unvisited = 0;
-            markersLayerGroup.eachLayer(function(marker) {
-                if (marker.isVisited) {
-                    visited++;
-                } else {
-                    unvisited++;
-                }
-            });
-
-            visitedCountDisplay.textContent = `زار: ${visited}`;
-            unvisitedCountDisplay.textContent = `لم يزر: ${unvisited}`;
-
-            if (visited > 0 || unvisited > 0) {
-                visitedCountDisplay.classList.remove('hidden');
-                unvisitedCountDisplay.classList.remove('hidden');
-            } else {
-                visitedCountDisplay.classList.add('hidden');
-                unvisitedCountDisplay.classList.add('hidden');
-            }
-        }
-
-
-        function setMarkerVisitedStatus(marker, isVisited) {
-            if (marker) {
-                marker.isVisited = isVisited;
-                marker.setIcon(isVisited ? greenIcon : defaultIcon);
-                updateVisitCounts(); // تحديث الإحصائيات بعد تغيير حالة علامة
-            }
-        }
-
-        function showSelectedSiteInfo(siteName, gmapsUrl, marker) {
-            // ... (نفس الكود)
-            selectedSiteNameDisplay.textContent = siteName;
-            selectedSiteNameDisplay.title = siteName;
-            selectedSiteNameDisplay.classList.remove('hidden');
-            selectedSiteNameDisplay.classList.add('copyable');
-            btnOpenGmaps.onclick = () => window.open(gmapsUrl, '_blank');
-            btnOpenGmaps.classList.remove('hidden');
-            markerVisitedToggleContainer.classList.remove('hidden');
-            toggleMarkerVisitedCheckbox.checked = marker.isVisited || false;
-        }
-
-        function hideSelectedSiteInfo() {
-            // ... (نفس الكود)
-            selectedSiteNameDisplay.classList.add('hidden');
-            selectedSiteNameDisplay.classList.remove('copyable', 'copied');
-            btnOpenGmaps.classList.add('hidden');
-            markerVisitedToggleContainer.classList.add('hidden');
-            currentSelectedMarker = null;
-        }
-        
-        selectedSiteNameDisplay.addEventListener('click', function() {
-            // ... (نفس كود نسخ النص)
-             if (!this.classList.contains('hidden') && this.textContent) {
-                navigator.clipboard.writeText(this.textContent)
-                    .then(() => {
-                        this.classList.add('copied');
-                        const originalText = this.textContent;
-                        this.textContent = 'تم النسخ!';
-                        setTimeout(() => { this.classList.remove('copied'); this.textContent = originalText; }, 1500);
-                    })
-                    .catch(err => { console.error('Copy failed: ', err); alert('Failed to copy.'); });
-            }
-        });
-
-        toggleMarkerVisitedCheckbox.addEventListener('change', function() {
-            if (currentSelectedMarker) {
-                setMarkerVisitedStatus(currentSelectedMarker, this.checked);
-            }
-        });
-
-        btnExportUnvisited.addEventListener('click', function() {
-            // ... (نفس كود التصدير)
-            const unvisitedSitesData = [];
-            unvisitedSitesData.push(['رابط جوجل ماب', 'اسم الموقع']); 
-
-            markersLayerGroup.eachLayer(function(marker) {
-                if (marker.siteData && !marker.isVisited) {
-                    unvisitedSitesData.push([ marker.siteData.url, marker.siteData.name ]);
-                }
-            });
-
-            if (unvisitedSitesData.length <= 1) { 
-                alert('لا توجد مواقع غير مزورة لتصديرها.');
-                return;
-            }
-            const worksheet = XLSX.utils.aoa_to_sheet(unvisitedSitesData);
-            const workbook = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(workbook, worksheet, 'المواقع غير المزورة');
-            const today = new Date();
-            const dateString = `${today.getFullYear()}-${(today.getMonth()+1).toString().padStart(2, '0')}-${today.getDate().toString().padStart(2, '0')}`;
-            const fileName = `unvisited_sites_${dateString}.xlsx`;
-            XLSX.writeFile(workbook, fileName);
-        });
-
-
-        map.on('click', () => hideSelectedSiteInfo());
         
         function processExcelData(data) {
             markersLayerGroup.clearLayers();
@@ -263,7 +466,6 @@
             let processedRows = 0;
 
             for (let i = 0; i < data.length; i++) {
-                // ... (نفس منطق معالجة كل صف)
                 const row = data[i];
                 if (row && row.length >= 1) {
                     processedRows++;
@@ -276,6 +478,7 @@
                             marker.siteData = { name: siteName, url: googleMapsUrl };
                             marker.isVisited = false; 
                             marker.on('click', function(e) {
+                                if (isSelectMode) return;
                                 L.DomEvent.stopPropagation(e);
                                 currentSelectedMarker = this;
                                 showSelectedSiteInfo(this.siteData.name, this.siteData.url, this);
@@ -286,19 +489,256 @@
                     }
                 }
             }
-            // ... (نفس كود fitBounds والتنبيهات)
+
             if (newMarkers.length > 0) {
                 const group = new L.featureGroup(newMarkers);
                 map.fitBounds(group.getBounds().pad(0.1));
-                console.log(`Added ${newMarkers.length} sites.`);
+                showNotification(`تم تحميل ${newMarkers.length} موقعاً بنجاح`, "success");
             } else if (processedRows > 0) {
-                alert(`Processed ${processedRows} rows, but no valid coordinates found.`);
+                showNotification(`تمت معالجة ${processedRows} صفاً، ولكن لم يتم العثور على إحداثيات صالحة.`, "warning");
             } else {
-                 alert("File seems empty.");
+                showNotification("الملف يبدو فارغاً.", "info");
             }
-
-            updateVisitCounts(); // تحديث الإحصائيات بعد معالجة البيانات
+            updateVisitCounts();
         }
+        
+        function parseGoogleMapsUrl(url) {
+             if (!url || typeof url !== 'string') return null;
+            let match = url.match(/@([-+]?\d*\.?\d+),([-+]?\d*\.?\d+)/);
+            if (match && match[1] && match[2]) return { lat: parseFloat(match[1]), lng: parseFloat(match[2]) };
+            match = url.match(/(?:q=loc:|q=|ll=)([-+]?\d*\.?\d+),([-+]?\d*\.?\d+)/);
+            if (match && match[1] && match[2]) return { lat: parseFloat(match[1]), lng: parseFloat(match[2]) };
+            return null;
+        }
+        
+        function updateVisitCounts() {
+            let visited = 0;
+            let unvisited = 0;
+            markersLayerGroup.eachLayer(marker => marker.isVisited ? visited++ : unvisited++);
+
+            visitedCounter.querySelector('span').textContent = `${visited}`;
+            unvisitedCounter.querySelector('span').textContent = `${unvisited}`;
+
+            if (visited > 0 || unvisited > 0) {
+                visitedCounter.classList.remove('hidden');
+                unvisitedCounter.classList.remove('hidden');
+            } else {
+                visitedCounter.classList.add('hidden');
+                unvisitedCounter.classList.add('hidden');
+            }
+        }
+        
+        function setMarkerVisitedStatus(marker, isVisited) {
+            if (marker) {
+                marker.isVisited = isVisited;
+                marker.setIcon(isVisited ? greenIcon : defaultIcon);
+            }
+        }
+        
+        function showSelectedSiteInfo(siteName, gmapsUrl, marker) {
+            siteNameDisplay.textContent = siteName;
+            siteNameDisplay.title = siteName;
+            siteNameDisplay.classList.remove('hidden', 'copied');
+            btnOpenGmaps.onclick = () => window.open(gmapsUrl, '_blank');
+            btnOpenGmaps.classList.remove('hidden');
+            document.getElementById('visit-controls').classList.remove('hidden');
+            toggleVisitedBtn.querySelector('span').textContent = marker.isVisited ? "إلغاء الزيارة" : "تمت الزيارة";
+        }
+        
+        function hideSelectedSiteInfo() {
+            siteNameDisplay.classList.add('hidden');
+            siteNameDisplay.classList.remove('copied');
+            document.getElementById('visit-controls').classList.add('hidden');
+            currentSelectedMarker = null;
+        }
+        
+        function copySiteName() {
+             if (!this.classList.contains('hidden') && this.textContent) {
+                navigator.clipboard.writeText(this.title)
+                    .then(() => {
+                        this.classList.add('copied');
+                        const originalText = this.textContent;
+                        this.textContent = 'تم النسخ!';
+                        setTimeout(() => { 
+                            this.classList.remove('copied'); 
+                            this.textContent = this.title; 
+                        }, 1500);
+                    })
+                    .catch(err => { 
+                        console.error('Copy failed: ', err); 
+                        showNotification('فشل النسخ.', "error");
+                    });
+            }
+        }
+        
+        function handleVisitedToggle() {
+            if (currentSelectedMarker) {
+                const newStatus = !currentSelectedMarker.isVisited;
+                setMarkerVisitedStatus(currentSelectedMarker, newStatus);
+                toggleVisitedBtn.querySelector('span').textContent = newStatus ? "إلغاء الزيارة" : "تمت الزيارة";
+                updateVisitCounts();
+            }
+        }
+        
+        function exportUnvisitedSites() {
+            const unvisitedSitesData = [['رابط جوجل ماب', 'اسم الموقع']];
+            markersLayerGroup.eachLayer(marker => {
+                if (marker.siteData && !marker.isVisited) {
+                    unvisitedSitesData.push([ marker.siteData.url, marker.siteData.name ]);
+                }
+            });
+
+            if (unvisitedSitesData.length <= 1) { 
+                showNotification('لا توجد مواقع غير مزورة لتصديرها.', "info");
+                return;
+            }
+            const worksheet = XLSX.utils.aoa_to_sheet(unvisitedSitesData);
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, worksheet, 'المواقع غير المزورة');
+            const today = new Date();
+            const dateString = `${today.getFullYear()}-${(today.getMonth()+1).toString().padStart(2, '0')}-${today.getDate().toString().padStart(2, '0')}`;
+            XLSX.writeFile(workbook, `unvisited_sites_${dateString}.xlsx`);
+            showNotification(`تم تصدير ${unvisitedSitesData.length - 1} موقعاً غير مزار`, "success");
+        }
+        
+        // --- START: REVISED AUTOMATIC SELECTION CODE ---
+        function toggleSelectMode() {
+            if (isSelectMode) {
+                cancelAreaSelection();
+            } else {
+                isSelectMode = true;
+                hideSelectedSiteInfo();
+                mapElement.classList.add('select-mode');
+                btnSelectArea.classList.add('active');
+                showNotification("حدد منطقة على الخريطة لتحديد المواقع", "info");
+            }
+        }
+
+        function handleMapMouseDown(e) {
+            if (isSelectMode && !isDrawing) {
+                isDrawing = true;
+                startPoint = e.latlng;
+                map.dragging.disable();
+                selectionRectangle = L.rectangle([startPoint, startPoint], {
+                    color: "#ff7800", weight: 1, fillOpacity: 0.2
+                }).addTo(map);
+            }
+        }
+
+        function handleMapMouseMove(e) {
+            if (isDrawing) {
+                selectionRectangle.setBounds(L.latLngBounds(startPoint, e.latlng));
+            }
+        }
+
+        function handleMapMouseUp() {
+            if (isDrawing) {
+                isDrawing = false;
+                map.dragging.enable();
+                // بمجرد الانتهاء من الرسم، قم بمعالجة التحديد تلقائياً
+                if (selectionRectangle) {
+                    processAutomaticSelection();
+                }
+            }
+        }
+        
+        function processAutomaticSelection() {
+            try {
+                const bounds = selectionRectangle.getBounds();
+                const markersInSelection = [];
+                let visitedInSelection = 0;
+                let unvisitedInSelection = 0;
+
+                // الخطوة الأولى: إيجاد العلامات داخل التحديد وحساب حالتها
+                markersLayerGroup.eachLayer(marker => {
+                    if (bounds.contains(marker.getLatLng())) {
+                        markersInSelection.push(marker);
+                        if (marker.isVisited) {
+                            visitedInSelection++;
+                        } else {
+                            unvisitedInSelection++;
+                        }
+                    }
+                });
+                
+                if (markersInSelection.length === 0) {
+                    showNotification("لم يتم تحديد أي مواقع في المنطقة", "info");
+                    return;
+                }
+
+                // الخطوة الثانية: تحديد الحالة الجديدة (التبديل الذكي)
+                const markAsVisited = unvisitedInSelection >= visitedInSelection;
+
+                // الخطوة الثالثة: تطبيق الحالة الجديدة وتحديث العدادات
+                markersInSelection.forEach(marker => {
+                    setMarkerVisitedStatus(marker, markAsVisited);
+                });
+                
+                updateVisitCounts();
+                showNotification(`تم تحديث ${markersInSelection.length} موقعاً`, "success");
+
+            } catch (e) {
+                console.error("An error occurred during automatic selection:", e);
+                showNotification("حدث خطأ أثناء معالجة التحديد.", "error");
+            } finally {
+                // الخطوة الرابعة: تنظيف الواجهة دائماً بعد العملية
+                cancelAreaSelection();
+            }
+        }
+
+        function cancelAreaSelection() {
+            if (selectionRectangle) {
+                map.removeLayer(selectionRectangle);
+                selectionRectangle = null;
+            }
+            isSelectMode = false;
+            isDrawing = false;
+            mapElement.classList.remove('select-mode');
+            btnSelectArea.classList.remove('active');
+            map.dragging.enable();
+        }
+        // --- END: REVISED AUTOMATIC SELECTION CODE ---
+        
+        // دالة لعرض الإشعارات
+        function showNotification(message, type) {
+            // إزالة أي إشعارات سابقة
+            const oldNotification = document.querySelector('.notification');
+            if (oldNotification) oldNotification.remove();
+            
+            const notification = document.createElement('div');
+            notification.className = `notification ${type}`;
+            notification.textContent = message;
+            document.body.appendChild(notification);
+            
+            setTimeout(() => {
+                notification.style.opacity = '0';
+                setTimeout(() => notification.remove(), 300);
+            }, 1500);
+        }
+        
+        // إضافة أنماط الإشعارات
+        const style = document.createElement('style');
+        style.innerHTML = `
+            .notification {
+                position: fixed;
+                top: 20px;
+                left: 50%;
+                transform: translateX(-50%);
+                padding: 12px 24px;
+                border-radius: 8px;
+                color: white;
+                font-weight: 500;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+                z-index: 2000;
+                opacity: 1;
+                transition: opacity 0.3s;
+            }
+            .success { background: linear-gradient(135deg, #40c057, #2b8a3e); }
+            .error { background: linear-gradient(135deg, #ff6b6b, #c92a2a); }
+            .warning { background: linear-gradient(135deg, #ffa94d, #e67700); }
+            .info { background: linear-gradient(135deg, #4dabf7, #228be6); }
+        `;
+        document.head.appendChild(style);
     </script>
 </body>
 </html>
