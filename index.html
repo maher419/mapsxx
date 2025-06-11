@@ -157,6 +157,10 @@
             background: linear-gradient(135deg, var(--green-icon), #40c057);
         }
         
+        #btn-export-selected::before {
+            background: linear-gradient(135deg, var(--purple-icon), #9c36b5);
+        }
+        
         /* عناصر المعلومات */
         .info-element {
             background: var(--floating-element-bg);
@@ -290,34 +294,25 @@
             display: none;
         }
         
-        #zoom-controls {
+        /* إشعارات */
+        .notification {
             position: fixed;
-            bottom: 80px;
-            right: 20px;
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-            z-index: 1000;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 12px 24px;
+            border-radius: 8px;
+            color: white;
+            font-weight: 500;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            z-index: 2000;
+            opacity: 1;
+            transition: opacity 0.3s;
         }
-        
-        .zoom-button {
-            width: 40px;
-            height: 40px;
-            border-radius: 50%;
-            background: var(--floating-element-bg);
-            backdrop-filter: blur(10px);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 20px;
-            box-shadow: var(--element-shadow);
-            border: var(--element-border);
-            cursor: pointer;
-        }
-        
-        .zoom-button:hover {
-            background: rgba(255, 255, 255, 0.95);
-        }
+        .success { background: linear-gradient(135deg, #40c057, #2b8a3e); }
+        .error { background: linear-gradient(135deg, #ff6b6b, #c92a2a); }
+        .warning { background: linear-gradient(135deg, #ffa94d, #e67700); }
+        .info { background: linear-gradient(135deg, #4dabf7, #228be6); }
     </style>
 </head>
 <body>
@@ -335,17 +330,22 @@
         <button class="floating-button" id="btn-export-unvisited" title="تصدير غير المزارة">
             <i class="fas fa-file-export"></i>
         </button>
+        
+        <!-- زر تصدير المناطق المحددة -->
+        <button class="floating-button" id="btn-export-selected" title="تصدير المناطق المحددة">
+            <i class="fas fa-download"></i>
+        </button>
     </div>
     
     <div id="left-controls" class="floating-element">
         <div class="counter-element" id="visited-counter">
             <i class="fas fa-check-circle" style="color: #40c057;"></i>
-            <span> 0</span>
+            <span>زار: 0</span>
         </div>
         
         <div class="counter-element" id="unvisited-counter">
             <i class="fas fa-times-circle" style="color: #ff6b6b;"></i>
-            <span> 0</span>
+            <span>لم يزر: 0</span>
         </div>
     </div>
     
@@ -359,15 +359,6 @@
         <div class="toggle-button" id="toggle-visited-btn">
             <i class="fas fa-check-square"></i>
             <span>تمت الزيارة</span>
-        </div>
-    </div>
-    
-    <div id="zoom-controls">
-        <div class="zoom-button" id="zoom-in">
-            <i class="fas fa-plus"></i>
-        </div>
-        <div class="zoom-button" id="zoom-out">
-            <i class="fas fa-minus"></i>
         </div>
     </div>
     
@@ -404,11 +395,10 @@
         const btnOpenGmaps = document.getElementById('btn-open-gmaps');
         const toggleVisitedBtn = document.getElementById('toggle-visited-btn');
         const btnExportUnvisited = document.getElementById('btn-export-unvisited');
+        const btnExportSelected = document.getElementById('btn-export-selected');
         const visitedCounter = document.getElementById('visited-counter');
         const unvisitedCounter = document.getElementById('unvisited-counter');
         const mapElement = document.getElementById('map');
-        const zoomInBtn = document.getElementById('zoom-in');
-        const zoomOutBtn = document.getElementById('zoom-out');
         
         // --- متغيرات ميزة تحديد المنطقة ---
         const btnSelectArea = document.getElementById('btn-select-area');
@@ -424,8 +414,7 @@
         siteNameDisplay.addEventListener('click', copySiteName);
         toggleVisitedBtn.addEventListener('click', handleVisitedToggle);
         btnExportUnvisited.addEventListener('click', exportUnvisitedSites);
-        zoomInBtn.addEventListener('click', () => map.zoomIn());
-        zoomOutBtn.addEventListener('click', () => map.zoomOut());
+        btnExportSelected.addEventListener('click', exportSelectedSites);
         map.on('click', () => hideSelectedSiteInfo());
         map.on('mousedown', handleMapMouseDown);
         map.on('mousemove', handleMapMouseMove);
@@ -516,8 +505,8 @@
             let unvisited = 0;
             markersLayerGroup.eachLayer(marker => marker.isVisited ? visited++ : unvisited++);
 
-            visitedCounter.querySelector('span').textContent = `${visited}`;
-            unvisitedCounter.querySelector('span').textContent = `${unvisited}`;
+            visitedCounter.querySelector('span').textContent = `زار: ${visited}`;
+            unvisitedCounter.querySelector('span').textContent = `لم يزر: ${unvisited}`;
 
             if (visited > 0 || unvisited > 0) {
                 visitedCounter.classList.remove('hidden');
@@ -582,23 +571,53 @@
         
         function exportUnvisitedSites() {
             const unvisitedSitesData = [['رابط جوجل ماب', 'اسم الموقع']];
+            let unvisitedCount = 0;
+            
             markersLayerGroup.eachLayer(marker => {
                 if (marker.siteData && !marker.isVisited) {
                     unvisitedSitesData.push([ marker.siteData.url, marker.siteData.name ]);
+                    unvisitedCount++;
                 }
             });
 
-            if (unvisitedSitesData.length <= 1) { 
+            if (unvisitedCount === 0) { 
                 showNotification('لا توجد مواقع غير مزورة لتصديرها.', "info");
                 return;
             }
+            
             const worksheet = XLSX.utils.aoa_to_sheet(unvisitedSitesData);
             const workbook = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(workbook, worksheet, 'المواقع غير المزورة');
             const today = new Date();
             const dateString = `${today.getFullYear()}-${(today.getMonth()+1).toString().padStart(2, '0')}-${today.getDate().toString().padStart(2, '0')}`;
             XLSX.writeFile(workbook, `unvisited_sites_${dateString}.xlsx`);
-            showNotification(`تم تصدير ${unvisitedSitesData.length - 1} موقعاً غير مزار`, "success");
+            showNotification(`تم تصدير ${unvisitedCount} موقعاً غير مزار`, "success");
+        }
+        
+        // دالة تصدير المناطق المحددة
+        function exportSelectedSites() {
+            const selectedSitesData = [['رابط جوجل ماب', 'اسم الموقع']];
+            let visitedCount = 0;
+            
+            markersLayerGroup.eachLayer(marker => {
+                if (marker.siteData && marker.isVisited) {
+                    selectedSitesData.push([ marker.siteData.url, marker.siteData.name ]);
+                    visitedCount++;
+                }
+            });
+            
+            if (visitedCount === 0) { 
+                showNotification('لا توجد مواقع محددة لتصديرها.', "info");
+                return;
+            }
+            
+            const worksheet = XLSX.utils.aoa_to_sheet(selectedSitesData);
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, worksheet, 'المواقع المحددة');
+            const today = new Date();
+            const dateString = `${today.getFullYear()}-${(today.getMonth()+1).toString().padStart(2, '0')}-${today.getDate().toString().padStart(2, '0')}`;
+            XLSX.writeFile(workbook, `selected_sites_${dateString}.xlsx`);
+            showNotification(`تم تصدير ${visitedCount} موقعاً محدداً`, "success");
         }
         
         // --- START: REVISED AUTOMATIC SELECTION CODE ---
@@ -713,32 +732,8 @@
             setTimeout(() => {
                 notification.style.opacity = '0';
                 setTimeout(() => notification.remove(), 300);
-            }, 1500);
+            }, 1000);
         }
-        
-        // إضافة أنماط الإشعارات
-        const style = document.createElement('style');
-        style.innerHTML = `
-            .notification {
-                position: fixed;
-                top: 20px;
-                left: 50%;
-                transform: translateX(-50%);
-                padding: 12px 24px;
-                border-radius: 8px;
-                color: white;
-                font-weight: 500;
-                box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-                z-index: 2000;
-                opacity: 1;
-                transition: opacity 0.3s;
-            }
-            .success { background: linear-gradient(135deg, #40c057, #2b8a3e); }
-            .error { background: linear-gradient(135deg, #ff6b6b, #c92a2a); }
-            .warning { background: linear-gradient(135deg, #ffa94d, #e67700); }
-            .info { background: linear-gradient(135deg, #4dabf7, #228be6); }
-        `;
-        document.head.appendChild(style);
     </script>
 </body>
 </html>
